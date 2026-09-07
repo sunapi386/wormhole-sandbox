@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Wormhole Network — v3</title>
+<style>
+  :root {
+    --panel-bg: rgba(10, 12, 20, 0.72);
+    --accent: #5fe0c0;
+    --accent-dim: #2f6b60;
+    --text: #dcf0ea;
+    --text-dim: #8fb0a8;
+    --track: #1d3430;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; width: 100%; background: #000; overflow: hidden;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    color: var(--text); -webkit-user-select: none; user-select: none; touch-action: none;
+  }
+  #glcanvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  #glcanvas.dragging { cursor: grabbing; }
+  #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+  #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none;
+           transition: opacity .5s ease; z-index: 8; }
+
+  #panel {
+    position: fixed; top: 14px; left: 14px; width: 290px; max-height: calc(100vh - 28px);
+    z-index: 6; overflow-y: auto; background: var(--panel-bg);
+    backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    border: 1px solid rgba(95, 224, 192, 0.2); border-radius: 12px; padding: 14px 15px 16px;
+    font-size: 12px; line-height: 1.4; box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    transition: transform .28s ease, opacity .28s ease;
+  }
+  #panel.hidden { transform: translateX(-115%); opacity: 0; }
+  #panel::-webkit-scrollbar { width: 8px; }
+  #panel::-webkit-scrollbar-thumb { background: var(--accent-dim); border-radius: 4px; }
+
+  .title { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 2px; }
+  .sub { color: var(--text-dim); font-size: 10.5px; margin: 0 0 10px; }
+  .sub a { color: var(--accent); }
+  .keys { font-size: 10.5px; color: var(--text-dim); background: rgba(95,224,192,0.06);
+          border: 1px solid rgba(95,224,192,0.14); border-radius: 8px; padding: 7px 9px; margin: 4px 0 6px; }
+  .keys b { color: var(--accent); font-weight: 500; }
+
+  .group { margin: 12px 0 4px; color: var(--text-dim); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 9px; }
+  .row { margin: 9px 0; }
+  .row label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+  .row .name { color: var(--text); }
+  .row .val { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    border-radius: 3px; background: var(--track); outline: none; margin: 2px 0; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(95,224,192,0.6); cursor: pointer; border: none; }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer; }
+
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 2px; }
+  .checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); }
+  input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+
+  .btns { display: flex; gap: 7px; margin-top: 12px; flex-wrap: wrap; }
+  button { flex: 1 1 auto; min-width: 62px; background: rgba(95,224,192,0.08); color: var(--accent);
+    border: 1px solid rgba(95,224,192,0.3); border-radius: 7px; padding: 7px 6px; font-family: inherit;
+    font-size: 11px; letter-spacing: .04em; cursor: pointer; transition: background .15s; }
+  button:hover { background: rgba(95,224,192,0.18); }
+  button:active { transform: translateY(1px); }
+
+  #hud { position: fixed; bottom: 12px; left: 14px; z-index: 6; font-size: 11px; color: var(--text-dim);
+    background: rgba(10,12,20,0.55); padding: 6px 10px; border-radius: 7px; pointer-events: none; }
+  #hud b { color: var(--accent); font-weight: 500; }
+  #world { position: fixed; top: 16px; right: 18px; z-index: 6; font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); background: rgba(10,12,20,0.55); padding: 7px 12px; border-radius: 8px;
+    border: 1px solid rgba(95,224,192,0.25); pointer-events: none; }
+  #toggle { position: fixed; top: 14px; left: 14px; z-index: 5; display: none; background: var(--panel-bg);
+    color: var(--accent); border: 1px solid rgba(95,224,192,0.3); border-radius: 8px; width: 38px; height: 38px; font-size: 17px; cursor: pointer; }
+  #panel.hidden ~ #toggle { display: block; }
+  #err { position: fixed; inset: 0; display: none; place-items: center; background: #000; color: #ff7a7a; font-size: 13px; padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+<canvas id="overlay"></canvas>
+<div id="flash"></div>
+<button id="toggle" title="Show controls">☰</button>
+<div id="world">Cosmos</div>
+
+<div id="panel">
+  <div class="title">Wormhole Network · v3</div>
+  <div class="sub">Three worlds linked by traversable wormholes. Fly into a mouth, emerge in the world it connects to. <a href="index.html">v1</a> · <a href="v2.html">v2</a></div>
+  <div class="keys"><b>W A S D</b> fly · <b>drag</b> look · <b>scroll</b> in/out · <b>R/F</b> up/down · <b>Shift</b> boost · <b>Space</b> pause anim</div>
+
+  <div class="group">Wormholes</div>
+  <div class="row" data-slider="throat"></div>
+  <div class="row" data-slider="curve"></div>
+  <div class="row" data-slider="rim"></div>
+
+  <div class="group">Flight &amp; camera</div>
+  <div class="row" data-slider="flySpeed"></div>
+  <div class="row" data-slider="fov"></div>
+
+  <div class="group">Render</div>
+  <div class="row" data-slider="brightness"></div>
+  <div class="row" data-slider="quality"></div>
+  <div class="row" data-slider="resScale"></div>
+
+  <div class="checks">
+    <label><input type="checkbox" id="chkAuto"> Auto-fly</label>
+    <label><input type="checkbox" id="chkPause"> Pause anim</label>
+  </div>
+
+  <div class="btns">
+    <button id="btnReset">Reset pos</button>
+    <button id="btnShot">Shot</button>
+    <button id="btnHide">Hide ‹</button>
+  </div>
+</div>
+
+<div id="hud"><b id="fps">—</b> fps · <span id="resTxt"></span></div>
+<div id="err"></div>
+
+<!-- ============================ vertex shader ============================ -->
+<script id="vs" type="x-shader/x-vertex">
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+</script>
+
+<!-- =========================== fragment shader =========================== -->
+<script id="fs" type="x-shader/x-fragment">
+precision highp float;
+
+#define NUM_PORTALS 6
+#define MAX_SEG 5
+#define PSTEPS 80
+#define PI 3.14159265
+
+uniform vec2  uResolution;
+uniform float uTime;
+uniform vec3  uCamPos;
+uniform vec3  uCamRight, uCamUp, uCamFwd;
+uniform float uFov;
+uniform int   uCamWorld;
+
+uniform float uCurve, uRim, uBright, uStepScale;
+
+uniform vec3  uPortPos[NUM_PORTALS];
+uniform vec3  uPortDst[NUM_PORTALS];
+uniform float uPortRad[NUM_PORTALS];
+uniform int   uPortWorld[NUM_PORTALS];
+uniform int   uPortDstWorld[NUM_PORTALS];
+
+// ------------------------------------------------------------- noise
+float hash21(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i), b = hash21(i + vec2(1,0)), c = hash21(i + vec2(0,1)), d = hash21(i + vec2(1,1));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 5; k++){ v += a * vnoise(p); p *= 2.03; a *= 0.5; } return v; }
+
+// ------------------------------------------------------------- worlds
+vec3 wSpace(vec3 d){
+  float u = atan(d.z, d.x), v = asin(clamp(d.y, -1.0, 1.0)); vec2 uv = vec2(u, v);
+  float neb = fbm(uv * 2.0 + 4.0) * fbm(uv * 3.7 - 2.0);
+  vec3 col = mix(vec3(0.006,0.008,0.016), vec3(0.10,0.04,0.17), neb) * neb * 1.4;
+  col += vec3(0.02,0.05,0.09) * pow(neb, 2.0) * 0.6;
+  for (int L = 0; L < 3; L++){
+    float sc = 70.0 + float(L) * 130.0; vec2 g = uv * sc; vec2 id = floor(g), f = fract(g);
+    float h = hash21(id + float(L) * 41.7);
+    if (h > 0.955){
+      vec2 sp = vec2(hash21(id + 1.7), hash21(id + 4.3));
+      float star = smoothstep(0.14, 0.0, length(f - sp));
+      float tw = 0.65 + 0.35 * sin(uTime * 2.5 + h * 120.0);
+      vec3 sc2 = mix(vec3(0.65,0.78,1.0), vec3(1.0,0.87,0.62), hash21(id + 8.1));
+      col += star * tw * sc2 * ((h - 0.955) / 0.045) * 1.7;
+    }
+  }
+  return col;
+}
+vec3 daySky(vec3 d){
+  vec3 sun = normalize(vec3(0.4, 0.35, 0.8));
+  float y = clamp(d.y, 0.0, 1.0);
+  vec3 sky = mix(vec3(0.78,0.86,1.0), vec3(0.18,0.40,0.85), y);
+  float s = max(dot(d, sun), 0.0);
+  sky += vec3(1.0,0.96,0.82) * pow(s, 1500.0) * 5.0;
+  sky += vec3(1.0,0.90,0.70) * pow(s, 5.0) * 0.30;
+  float cl = fbm(d.xz / max(d.y, 0.15) * 1.2 + uTime * 0.01);
+  sky = mix(sky, vec3(1.0), smoothstep(0.55, 0.95, cl) * clamp(d.y * 2.0, 0.0, 1.0) * 0.85);
+  return sky;
+}
+vec3 sunsetSky(vec3 d){
+  vec3 sun = normalize(vec3(0.75, 0.05, 0.66));
+  float y = clamp(d.y, 0.0, 1.0);
+  vec3 sky = mix(vec3(1.0,0.5,0.22), vec3(0.28,0.10,0.34), y);
+  float s = max(dot(d, sun), 0.0);
+  sky = mix(sky, vec3(1.0,0.8,0.4), pow(s, 4.0) * 0.5);
+  sky += vec3(1.0,0.55,0.25) * pow(s, 1200.0) * 6.0;
+  return sky;
+}
+vec3 skyOf(int w, vec3 d){ if (w == 0) return wSpace(d); else if (w == 1) return daySky(d); return sunsetSky(d); }
+
+vec3 grass(vec3 p, vec3 dir, float t){
+  float n = fbm(p.xz * 0.4) * 0.6 + fbm(p.xz * 2.0) * 0.4;
+  vec3 g = mix(vec3(0.18,0.42,0.13), vec3(0.30,0.55,0.20), n);
+  g *= 0.8 + 0.3 * fbm(p.xz * 8.0);
+  float fog = 1.0 - exp(-t * 0.03);
+  return mix(g, daySky(normalize(vec3(dir.x, 0.06, dir.z))), fog);
+}
+vec3 lava(vec3 p, vec3 dir, float t){
+  float n = fbm(p.xz * 0.5);
+  vec3 g = mix(vec3(0.15,0.05,0.04), vec3(0.35,0.12,0.08), n);
+  float veins = fbm(p.xz * 1.5 + uTime * 0.05);
+  g += vec3(1.0,0.35,0.07) * smoothstep(0.62, 0.95, veins) * 1.4;
+  float fog = 1.0 - exp(-t * 0.03);
+  return mix(g, sunsetSky(normalize(vec3(dir.x, 0.06, dir.z))), fog);
+}
+vec3 groundOf(int w, vec3 p, vec3 dir, float t){ if (w == 1) return grass(p, dir, t); return lava(p, dir, t); }
+bool hasGround(int w){ return w == 1 || w == 2; }
+vec3 worldTint(int w){ if (w == 0) return vec3(0.6,0.5,1.0); else if (w == 1) return vec3(0.45,1.0,0.55); return vec3(1.0,0.5,0.25); }
+
+// ------------------------------------------------------------- wormhole geodesic
+vec3 pd(vec3 y, float L, float b2){
+  float r2 = b2 + y.x * y.x;
+  return vec3(y.y, uCurve * (L * L) * y.x / (r2 * r2), L / r2);
+}
+void traverse(vec3 ro, vec3 rd, vec3 c, float b,
+              out vec3 outLocal, out vec3 outDir, out bool through, out float rim){
+  float b2 = b * b, Rinf = b * 3.0;
+  vec3 rel = ro - c;
+  float r0 = length(rel);
+  vec3 e1 = r0 > 1e-5 ? rel / r0 : vec3(1.0, 0.0, 0.0);
+  vec3 perp = rd - dot(rd, e1) * e1; float pl = length(perp);
+  vec3 e2 = pl > 1e-5 ? perp / pl : normalize(cross(e1, abs(e1.y) < 0.9 ? vec3(0,1,0) : vec3(1,0,0)));
+  float L = r0 * dot(rd, e2);
+  vec3 y = vec3(sqrt(max(r0 * r0 - b2, 0.0)), dot(rd, e1), 0.0);   // (l, l', phi)
+  for (int i = 0; i < PSTEPS; i++){
+    float r = sqrt(b2 + y.x * y.x);
+    if (r > Rinf + 0.001) break;
+    float h = uStepScale * max(0.02, 0.05 * r);
+    vec3 k1 = pd(y, L, b2);
+    vec3 k2 = pd(y + 0.5 * h * k1, L, b2);
+    vec3 k3 = pd(y + 0.5 * h * k2, L, b2);
+    vec3 k4 = pd(y + h * k3, L, b2);
+    y += (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+  }
+  float l = y.x, phi = y.z, r = sqrt(b2 + l * l);
+  float dr = (l / r) * y.y, phidot = L / (r * r);
+  vec3 radial = cos(phi) * e1 + sin(phi) * e2;
+  vec3 tang   = -sin(phi) * e1 + cos(phi) * e2;
+  outDir = normalize(dr * radial + r * phidot * tang);
+  outLocal = Rinf * radial;
+  through = (l < 0.0);
+  float w = max(0.09 * b, 0.05);
+  rim = exp(-pow((abs(L) - b) / w, 2.0));
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
+  float t = tan(uFov * 0.5);
+  vec3 dir = normalize(uCamFwd + uv.x * t * uCamRight + uv.y * t * uCamUp);
+  vec3 pos = uCamPos;
+  int world = uCamWorld;
+
+  vec3 col = vec3(0.0), glow = vec3(0.0);
+  bool done = false;
+
+  for (int seg = 0; seg < MAX_SEG; seg++){
+    // nearest portal influence-sphere in this world.
+    // NB: WebGL1 forbids indexing uniform arrays by a runtime var, so capture
+    // the winning portal's fields into locals using the loop index directly.
+    int hitP = -1; float tNear = 1e9;
+    vec3 hitPos = vec3(0.0), hitDst = vec3(0.0); float hitRad = 1.0; int hitDstWorld = 0;
+    for (int i = 0; i < NUM_PORTALS; i++){
+      if (uPortWorld[i] != world) continue;
+      vec3 oc = pos - uPortPos[i]; float R = uPortRad[i] * 3.0;
+      float d2 = dot(oc, oc); float th;
+      if (d2 < R * R) { th = 0.0; }
+      else {
+        float bb = dot(oc, dir), cc = d2 - R * R, disc = bb * bb - cc;
+        if (disc < 0.0) continue;
+        th = -bb - sqrt(disc);
+        if (th <= 1e-4) continue;
+      }
+      if (th < tNear){
+        tNear = th; hitP = i;
+        hitPos = uPortPos[i]; hitDst = uPortDst[i]; hitRad = uPortRad[i]; hitDstWorld = uPortDstWorld[i];
+      }
+    }
+    // ground plane
+    float tG = 1e9;
+    if (hasGround(world) && dir.y < -1e-4){ float tg = (0.0 - pos.y) / dir.y; if (tg > 1e-4) tG = tg; }
+
+    if (tG < tNear){ vec3 gp = pos + dir * tG; col = groundOf(world, gp, dir, tG); done = true; break; }
+    if (hitP < 0){ col = skyOf(world, dir); done = true; break; }
+
+    // enter portal influence and integrate the throat
+    pos += dir * tNear;
+    vec3 outLocal, outDir; bool through; float rim;
+    traverse(pos, dir, hitPos, hitRad, outLocal, outDir, through, rim);
+
+    if (through){
+      glow += worldTint(hitDstWorld) * rim * uRim;
+      pos = hitDst + outLocal; dir = outDir; world = hitDstWorld;
+    } else {
+      glow += worldTint(world) * rim * uRim;
+      pos = hitPos + outLocal + outDir * 0.01; dir = outDir;
+    }
+  }
+  if (!done) col = skyOf(world, dir);
+
+  col = col * uBright + glow;
+  col = vec3(1.0) - exp(-col * 1.1);
+  col = pow(col, vec3(1.0 / 2.2));
+  gl_FragColor = vec4(col, 1.0);
+}
+</script>
+
+<script>
+"use strict";
+(function () {
+  const canvas = document.getElementById("glcanvas");
+  const errBox = document.getElementById("err");
+  function fail(m){ errBox.style.display = "grid"; errBox.innerHTML = m; throw new Error(m); }
+
+  const gl = canvas.getContext("webgl", { antialias: false, preserveDrawingBuffer: true })
+          || canvas.getContext("experimental-webgl", { preserveDrawingBuffer: true });
+  if (!gl) fail("WebGL is not available in this browser.");
+
+  const overlay = document.getElementById("overlay");
+  const octx = overlay.getContext("2d");
+  const WORLD_HEX = ["#9a86ff", "#6dff8a", "#ff8a45"];   // Cosmos / Verdant / Ember
+  let winW = window.innerWidth, winH = window.innerHeight;
+
+  function compile(type, src){
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+      fail("Shader compile error:<br><pre style='text-align:left'>" + gl.getShaderInfoLog(s) + "</pre>");
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, document.getElementById("vs").textContent));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, document.getElementById("fs").textContent));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) fail("Link error: " + gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+
+  const vbuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, "aPos");
+  gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const U = {};
+  ["uResolution","uTime","uCamPos","uCamRight","uCamUp","uCamFwd","uFov","uCamWorld",
+   "uCurve","uRim","uBright","uStepScale",
+   "uPortPos","uPortDst","uPortRad","uPortWorld","uPortDstWorld"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+  // ---- world graph: 3 worlds, 6 mouths (fully-connected triangle) ----
+  const WORLD_NAMES = ["Cosmos", "Verdant", "Ember"];
+  const PORTALS = [
+    { world:0, pos:[ 7, 0.0, 0], dstWorld:1, dst:[ 7, 4.5, 0] },  // 0: Cosmos -> Verdant
+    { world:1, pos:[ 7, 4.5, 0], dstWorld:0, dst:[ 7, 0.0, 0] },  // 1: Verdant -> Cosmos
+    { world:0, pos:[-6, 1.0, 5], dstWorld:2, dst:[-6, 4.5, 3] },  // 2: Cosmos -> Ember
+    { world:2, pos:[-6, 4.5, 3], dstWorld:0, dst:[-6, 1.0, 5] },  // 3: Ember -> Cosmos
+    { world:1, pos:[-5, 4.5, 5], dstWorld:2, dst:[ 6, 4.5,-3] },  // 4: Verdant -> Ember
+    { world:2, pos:[ 6, 4.5,-3], dstWorld:1, dst:[-5, 4.5, 5] },  // 5: Ember -> Verdant
+  ];
+  const nP = PORTALS.length;
+  const portPos = new Float32Array(nP * 3), portDst = new Float32Array(nP * 3);
+  const portWorld = new Int32Array(nP), portDstWorld = new Int32Array(nP), portRad = new Float32Array(nP);
+  PORTALS.forEach((p, i) => {
+    portPos.set(p.pos, i * 3); portDst.set(p.dst, i * 3);
+    portWorld[i] = p.world; portDstWorld[i] = p.dstWorld;
+  });
+
+  // ---- sliders ----
+  const SPEC = {
+    throat:     ["Throat size",     0.6, 3.0, 0.02, 1.3, v => v.toFixed(2)],
+    curve:      ["Space curvature", 0.2, 3.0, 0.01, 1.0, v => v.toFixed(2)],
+    rim:        ["Portal rim glow", 0.0, 2.0, 0.02, 0.5, v => v.toFixed(2)],
+    flySpeed:   ["Fly speed",       1.0, 30.0, 0.5, 6.0, v => v.toFixed(1)],
+    fov:        ["Field of view",   40, 110, 1, 70, v => v.toFixed(0) + "°"],
+    brightness: ["Brightness",      0.2, 3.0, 0.02, 1.0, v => v.toFixed(2)],
+    quality:    ["Ray quality",     0.6, 2.5, 0.05, 1.0, v => (1 / v).toFixed(2) + "x"],
+    resScale:   ["Resolution",      0.4, 1.5, 0.05, 0.9, v => Math.round(v * 100) + "%"],
+  };
+  const state = {}, inputs = {}, valEls = {};
+  for (const key in SPEC){
+    const [label, mn, mx, step, def, fmt] = SPEC[key];
+    state[key] = def;
+    const row = document.querySelector(`[data-slider="${key}"]`);
+    row.innerHTML = `<label><span class="name">${label}</span><span class="val"></span></label>` +
+                    `<input type="range" min="${mn}" max="${mx}" step="${step}">`;
+    const input = row.querySelector("input"), valEl = row.querySelector(".val");
+    input.value = def; valEl.textContent = fmt(def);
+    input.addEventListener("input", () => { state[key] = parseFloat(input.value); valEl.textContent = fmt(state[key]); if (key === "resScale") resize(); });
+    inputs[key] = input; valEls[key] = valEl;
+  }
+
+  // ---- camera / flight ----
+  const START = { world: 0, pos: [0, 0.6, 10], yaw: -0.96, pitch: -0.03 };
+  const cam = { world: START.world, pos: START.pos.slice(), yaw: START.yaw, pitch: START.pitch };
+  let cooldown = 0;
+  const keys = {};
+  const chkAuto = document.getElementById("chkAuto"), chkPause = document.getElementById("chkPause");
+  const flash = document.getElementById("flash"), worldTag = document.getElementById("world");
+
+  function facing(){
+    const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+    return [cp * Math.cos(cam.yaw), sp, cp * Math.sin(cam.yaw)];
+  }
+
+  // drag to look
+  let dragging = false, lastX = 0, lastY = 0;
+  canvas.addEventListener("pointerdown", e => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.classList.add("dragging"); canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    cam.yaw += (e.clientX - lastX) * 0.005;
+    cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch - (e.clientY - lastY) * 0.005));
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  function endDrag(){ dragging = false; canvas.classList.remove("dragging"); }
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+
+  // scroll to dolly in/out along the view direction (throat crossing is caught next frame)
+  canvas.addEventListener("wheel", e => {
+    e.preventDefault();
+    const step = state.throat * 0.9 * (e.deltaY < 0 ? 1 : -1);   // up = forward/in
+    cam.pos = add(cam.pos, scale(facing(), step));
+    if (hasGroundJS(cam.world)) cam.pos[1] = Math.max(cam.pos[1], 0.4);
+  }, { passive: false });
+
+  const MOVE = { KeyW:1, KeyS:1, KeyA:1, KeyD:1, KeyR:1, KeyF:1, KeyQ:1, KeyE:1,
+                 ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1, ShiftLeft:1, ShiftRight:1, Space:1 };
+  window.addEventListener("keydown", e => {
+    if (e.code === "Space"){ chkPause.checked = !chkPause.checked; e.preventDefault(); return; }
+    if (e.code === "KeyH"){ panel.classList.toggle("hidden"); return; }
+    keys[e.code] = true; if (MOVE[e.code]) e.preventDefault();
+  });
+  window.addEventListener("keyup", e => { keys[e.code] = false; });
+
+  function doFlash(){ flash.style.transition = "none"; flash.style.opacity = "0.55";
+    requestAnimationFrame(() => { flash.style.transition = "opacity .5s ease"; flash.style.opacity = "0"; }); }
+
+  const panel = document.getElementById("panel");
+  document.getElementById("btnHide").onclick = () => panel.classList.add("hidden");
+  document.getElementById("toggle").onclick = () => panel.classList.remove("hidden");
+  document.getElementById("btnReset").onclick = () => { cam.world = START.world; cam.pos = START.pos.slice(); cam.yaw = START.yaw; cam.pitch = START.pitch; };
+  document.getElementById("btnShot").onclick = () => { renderFrame(performance.now()); const a = document.createElement("a"); a.download = "wormhole-network.png"; a.href = canvas.toDataURL("image/png"); a.click(); };
+
+  // ---- sizing ----
+  const resTxt = document.getElementById("resTxt");
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    winW = window.innerWidth; winH = window.innerHeight;
+    const s = state.resScale * dpr;
+    const w = Math.max(1, Math.floor(winW * s)), h = Math.max(1, Math.floor(winH * s));
+    if (canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; }
+    gl.viewport(0, 0, w, h); resTxt.textContent = w + "×" + h;
+    // crisp 2D overlay at device resolution, drawn in CSS-pixel coordinates
+    overlay.width = Math.floor(winW * dpr); overlay.height = Math.floor(winH * dpr);
+    overlay.style.width = winW + "px"; overlay.style.height = winH + "px";
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize); resize();
+
+  // ---- update + render ----
+  function update(dt){
+    const b = state.throat;
+    for (let i = 0; i < nP; i++) portRad[i] = b;   // all mouths share the current throat size
+
+    const fwd = facing();
+    let right = norm(cross(fwd, [0,1,0])); if (len(right) < 1e-4) right = [1,0,0];
+    const up = cross(right, fwd);
+
+    // free flight
+    const spd = state.flySpeed * (keys.ShiftLeft || keys.ShiftRight ? 3 : 1);
+    let mv = [0,0,0];
+    const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+    const s = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+    const u = (keys.KeyR || keys.KeyE ? 1 : 0) - (keys.KeyF || keys.KeyQ ? 1 : 0);
+    const strafe = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
+    mv = add(mv, scale(fwd, f)); mv = add(mv, scale(right, s + strafe)); mv = add(mv, scale([0,1,0], u));
+    if (chkAuto.checked) mv = add(mv, fwd);
+    cam.pos = add(cam.pos, scale(mv, spd * dt));
+
+    if (hasGroundJS(cam.world)) cam.pos[1] = Math.max(cam.pos[1], 0.4);
+
+    // teleport when crossing a throat
+    cooldown -= dt;
+    if (cooldown <= 0){
+      for (let i = 0; i < nP; i++){
+        if (PORTALS[i].world !== cam.world) continue;
+        const c = PORTALS[i].pos;
+        const d = Math.hypot(cam.pos[0]-c[0], cam.pos[1]-c[1], cam.pos[2]-c[2]);
+        if (d < b){
+          cam.world = PORTALS[i].dstWorld;
+          cam.pos = add(PORTALS[i].dst.slice(), scale(fwd, b * 1.4));
+          cooldown = 0.5; doFlash();
+          break;
+        }
+      }
+    }
+    return { fwd, right, up };
+  }
+
+  function renderFrame(now){
+    const dt = Math.min((now - (renderFrame._p || now)) / 1000, 0.05);
+    renderFrame._p = now;
+    if (!chkPause.checked) simTime += dt;
+    const basis = update(dt);
+    worldTag.textContent = WORLD_NAMES[cam.world];
+
+    gl.uniform2f(U.uResolution, canvas.width, canvas.height);
+    gl.uniform1f(U.uTime, simTime);
+    gl.uniform3fv(U.uCamPos, cam.pos);
+    gl.uniform3fv(U.uCamRight, basis.right);
+    gl.uniform3fv(U.uCamUp, basis.up);
+    gl.uniform3fv(U.uCamFwd, basis.fwd);
+    gl.uniform1f(U.uFov, state.fov * Math.PI / 180);
+    gl.uniform1i(U.uCamWorld, cam.world);
+    gl.uniform1f(U.uCurve, state.curve);
+    gl.uniform1f(U.uRim, state.rim);
+    gl.uniform1f(U.uBright, state.brightness);
+    gl.uniform1f(U.uStepScale, state.quality);
+    gl.uniform3fv(U.uPortPos, portPos);
+    gl.uniform3fv(U.uPortDst, portDst);
+    gl.uniform1fv(U.uPortRad, portRad);
+    gl.uniform1iv(U.uPortWorld, portWorld);
+    gl.uniform1iv(U.uPortDstWorld, portDstWorld);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    drawOverlay(basis);
+  }
+
+  let simTime = 0;
+  let fpsAccum = 0, fpsCount = 0, fpsShown = performance.now();
+  const fpsEl = document.getElementById("fps");
+  function loop(now){
+    renderFrame(now);
+    const inst = 1000 / Math.max(now - (loop._p || now), 0.001); loop._p = now;
+    fpsAccum += inst; fpsCount++;
+    if (now - fpsShown > 400){ fpsEl.textContent = Math.round(fpsAccum / fpsCount); fpsAccum = 0; fpsCount = 0; fpsShown = now; }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ---------------------------------------------------------------- 2D overlay
+  function drawOverlay(basis){
+    const W = winW, H = winH, cx0 = W / 2, cy0 = H / 2;
+    octx.clearRect(0, 0, W, H);
+    octx.textAlign = "left"; octx.textBaseline = "middle";
+
+    const fov = state.fov * Math.PI / 180;
+    const thy = Math.tan(fov / 2), thx = thy * (W / H);
+
+    for (let i = 0; i < nP; i++){
+      if (PORTALS[i].world !== cam.world) continue;
+      const P = PORTALS[i].pos;
+      const v = [P[0]-cam.pos[0], P[1]-cam.pos[1], P[2]-cam.pos[2]];
+      const fz = dot(v, basis.fwd), fx = dot(v, basis.right), fy = dot(v, basis.up);
+      const denom = Math.max(Math.abs(fz), 1e-3);
+      let sx = (fx / denom) / thx, sy = (fy / denom) / thy;
+      const col = WORLD_HEX[PORTALS[i].dstWorld];
+      const name = WORLD_NAMES[PORTALS[i].dstWorld].toUpperCase();
+      const onscreen = fz > 0 && Math.abs(sx) <= 0.9 && Math.abs(sy) <= 0.9;
+
+      if (onscreen){
+        const ex = cx0 + sx * (W / 2), ey = cy0 - sy * (H / 2);
+        onScreenTag(ex, ey, name, col);
+      } else {
+        if (fz <= 0 && Math.hypot(sx, sy) < 0.05) sy = -1;
+        const a = Math.atan2(sy, sx);
+        const dxu = Math.cos(a), dyu = Math.sin(a);
+        const mx = W / 2 - 52, my = H / 2 - 52;
+        const t = Math.min(Math.abs(mx / (Math.abs(dxu) < 1e-3 ? 1e-3 : dxu)),
+                           Math.abs(my / (Math.abs(dyu) < 1e-3 ? 1e-3 : dyu)));
+        edgeArrow(cx0 + dxu * t, cy0 - dyu * t, Math.atan2(-dyu, dxu), name, col);
+      }
+    }
+    drawMinimap();
+  }
+
+  function onScreenTag(x, y, name, col){
+    octx.save();
+    octx.font = "600 11px ui-monospace, monospace";
+    const w = octx.measureText(name).width + 20, ly = y - 34;
+    octx.beginPath();
+    octx.moveTo(x, y - 12); octx.lineTo(x - 5, ly + 9); octx.lineTo(x + 5, ly + 9); octx.closePath();
+    octx.fillStyle = col; octx.globalAlpha = 0.9; octx.fill();      // little pointer down to the mouth
+    roundRect(x - w / 2, ly - 9, w, 18, 5);
+    octx.fillStyle = "rgba(8,10,16,0.72)"; octx.fill();
+    octx.lineWidth = 1; octx.strokeStyle = col; octx.globalAlpha = 0.9; octx.stroke();
+    octx.globalAlpha = 1; octx.fillStyle = col; octx.textAlign = "center";
+    octx.fillText(name, x, ly + 1);
+    octx.restore();
+  }
+
+  function edgeArrow(x, y, ang, name, col){
+    octx.save();
+    octx.translate(x, y); octx.rotate(ang);
+    octx.beginPath();
+    octx.moveTo(12, 0); octx.lineTo(-8, 8); octx.lineTo(-8, -8); octx.closePath();
+    octx.fillStyle = col; octx.globalAlpha = 0.95; octx.fill();
+    octx.restore();
+    octx.save();
+    octx.font = "600 10px ui-monospace, monospace";
+    octx.fillStyle = col; octx.globalAlpha = 0.9;
+    octx.textAlign = x > winW / 2 ? "right" : "left";
+    octx.textBaseline = "middle";
+    octx.fillText(name, x + (x > winW / 2 ? -18 : 18), y);
+    octx.restore();
+  }
+
+  function drawMinimap(){
+    const R = 60, pad = 16, cx = winW - R - pad, cy = winH - R - pad, scale = R / 12;
+    octx.save();
+    octx.beginPath(); octx.arc(cx, cy, R, 0, 7); octx.fillStyle = "rgba(10,12,20,0.68)"; octx.fill();
+    octx.lineWidth = 1; octx.strokeStyle = "rgba(95,224,192,0.35)"; octx.stroke();
+    octx.beginPath(); octx.arc(cx, cy, R * 0.6, 0, 7); octx.strokeStyle = "rgba(95,224,192,0.12)"; octx.stroke();
+    octx.save();
+    octx.beginPath(); octx.arc(cx, cy, R - 2, 0, 7); octx.clip();
+    const clamp = (px, py) => {
+      let dx = px - cx, dy = py - cy, d = Math.hypot(dx, dy), m = R - 7;
+      if (d > m){ dx *= m / d; dy *= m / d; }
+      return [cx + dx, cy + dy];
+    };
+    for (let i = 0; i < nP; i++){
+      if (PORTALS[i].world !== cam.world) continue;
+      const p = clamp(cx + PORTALS[i].pos[0] * scale, cy + PORTALS[i].pos[2] * scale);
+      octx.beginPath(); octx.arc(p[0], p[1], 4, 0, 7);
+      octx.fillStyle = WORLD_HEX[PORTALS[i].dstWorld]; octx.fill();
+      octx.beginPath(); octx.arc(p[0], p[1], 6.5, 0, 7);
+      octx.strokeStyle = WORLD_HEX[PORTALS[i].dstWorld]; octx.globalAlpha = 0.5; octx.lineWidth = 1; octx.stroke();
+      octx.globalAlpha = 1;
+    }
+    const c = clamp(cx + cam.pos[0] * scale, cy + cam.pos[2] * scale);
+    octx.save(); octx.translate(c[0], c[1]); octx.rotate(Math.atan2(Math.sin(cam.yaw), Math.cos(cam.yaw)));
+    octx.beginPath(); octx.moveTo(7, 0); octx.lineTo(-4, 4); octx.lineTo(-4, -4); octx.closePath();
+    octx.fillStyle = "#5fe0c0"; octx.fill(); octx.restore();
+    octx.restore();  // unclip
+    octx.fillStyle = "rgba(143,176,168,0.85)"; octx.font = "9px ui-monospace, monospace";
+    octx.textAlign = "center"; octx.fillText("MAP", cx, cy - R - 5);
+    octx.restore();
+  }
+
+  function roundRect(x, y, w, h, r){
+    octx.beginPath();
+    octx.moveTo(x + r, y); octx.arcTo(x + w, y, x + w, y + h, r); octx.arcTo(x + w, y + h, x, y + h, r);
+    octx.arcTo(x, y + h, x, y, r); octx.arcTo(x, y, x + w, y, r); octx.closePath();
+  }
+
+  function hasGroundJS(w){ return w === 1 || w === 2; }
+  function cross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+  function dot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+  function len(a){ return Math.hypot(a[0],a[1],a[2]); }
+  function norm(a){ const l = len(a) || 1; return [a[0]/l,a[1]/l,a[2]/l]; }
+  function add(a,b){ return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]; }
+  function scale(a,s){ return [a[0]*s,a[1]*s,a[2]*s]; }
+})();
+</script>
+</body>
+</html>

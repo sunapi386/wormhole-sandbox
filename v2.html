@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Wormhole Portal Sandbox — v2</title>
+<style>
+  :root {
+    --panel-bg: rgba(10, 12, 20, 0.72);
+    --accent: #b98cff;
+    --accent-dim: #5b3f80;
+    --text: #e6dcf0;
+    --text-dim: #9a8fb0;
+    --track: #241d34;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; width: 100%;
+    background: #000; overflow: hidden;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    color: var(--text);
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #glcanvas { display: block; width: 100vw; height: 100vh; cursor: grab; }
+  #glcanvas.dragging { cursor: grabbing; }
+
+  #panel {
+    position: fixed; top: 14px; left: 14px;
+    width: 292px; max-height: calc(100vh - 28px);
+    overflow-y: auto;
+    background: var(--panel-bg);
+    backdrop-filter: blur(10px) saturate(1.2);
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    border: 1px solid rgba(185, 140, 255, 0.2);
+    border-radius: 12px;
+    padding: 14px 15px 16px;
+    font-size: 12px; line-height: 1.4;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    transition: transform .28s ease, opacity .28s ease;
+  }
+  #panel.hidden { transform: translateX(-115%); opacity: 0; }
+  #panel::-webkit-scrollbar { width: 8px; }
+  #panel::-webkit-scrollbar-thumb { background: var(--accent-dim); border-radius: 4px; }
+
+  .title { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 2px; }
+  .sub { color: var(--text-dim); font-size: 10.5px; margin: 0 0 12px; }
+  .sub a { color: var(--accent); }
+
+  .group { margin: 12px 0 4px; color: var(--text-dim); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 9px; }
+
+  .row { margin: 9px 0; }
+  .row label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+  .row .name { color: var(--text); }
+  .row .val { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; border-radius: 3px;
+    background: var(--track); outline: none; margin: 2px 0;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 8px rgba(185,140,255,0.6);
+    cursor: pointer; border: none;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); border: none; cursor: pointer;
+  }
+
+  .worldrow { display: flex; align-items: center; justify-content: space-between; margin: 7px 0; gap: 8px; }
+  .worldrow span { color: var(--text); white-space: nowrap; }
+  select {
+    flex: 1 1 auto; background: rgba(185,140,255,0.08); color: var(--accent);
+    border: 1px solid rgba(185,140,255,0.3); border-radius: 7px;
+    padding: 5px 7px; font-family: inherit; font-size: 11.5px; cursor: pointer;
+  }
+  select option { background: #16121f; color: var(--text); }
+
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 2px; }
+  .checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); }
+  input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+
+  .btns { display: flex; gap: 7px; margin-top: 12px; flex-wrap: wrap; }
+  button {
+    flex: 1 1 auto; min-width: 60px;
+    background: rgba(185,140,255,0.08); color: var(--accent);
+    border: 1px solid rgba(185,140,255,0.3); border-radius: 7px; padding: 7px 6px;
+    font-family: inherit; font-size: 11px; letter-spacing: .04em; cursor: pointer; transition: background .15s;
+  }
+  button:hover { background: rgba(185,140,255,0.18); }
+  button:active { transform: translateY(1px); }
+
+  #hud {
+    position: fixed; bottom: 12px; left: 14px;
+    font-size: 11px; color: var(--text-dim);
+    background: rgba(10,12,20,0.55); padding: 5px 9px; border-radius: 7px; pointer-events: none;
+  }
+  #hud b { color: var(--accent); font-weight: 500; }
+  #toggle {
+    position: fixed; top: 14px; left: 14px; z-index: 5; display: none;
+    background: var(--panel-bg); color: var(--accent);
+    border: 1px solid rgba(185,140,255,0.3); border-radius: 8px;
+    width: 38px; height: 38px; font-size: 17px; cursor: pointer;
+  }
+  #panel.hidden ~ #toggle { display: block; }
+  #err {
+    position: fixed; inset: 0; display: none; place-items: center;
+    background: #000; color: #ff7a7a; font-size: 13px; padding: 30px; text-align: center;
+  }
+</style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+<button id="toggle" title="Show controls">☰</button>
+
+<div id="panel">
+  <div class="title">Wormhole Portal · v2</div>
+  <div class="sub">A traversable Ellis wormhole: light dives through the throat into another world.
+    Drag to orbit · scroll to zoom. <a href="index.html">← v1 black hole</a></div>
+
+  <div class="group">Worlds</div>
+  <div class="worldrow"><span>Outside</span>
+    <select id="selOut"></select></div>
+  <div class="worldrow"><span>Portal</span>
+    <select id="selPortal"></select></div>
+
+  <div class="group">Wormhole</div>
+  <div class="row" data-slider="throat"></div>
+  <div class="row" data-slider="curve"></div>
+  <div class="row" data-slider="rim"></div>
+
+  <div class="group">Camera</div>
+  <div class="row" data-slider="distance"></div>
+  <div class="row" data-slider="pitch"></div>
+  <div class="row" data-slider="fov"></div>
+
+  <div class="group">Render</div>
+  <div class="row" data-slider="brightness"></div>
+  <div class="row" data-slider="quality"></div>
+  <div class="row" data-slider="resScale"></div>
+
+  <div class="checks">
+    <label><input type="checkbox" id="chkOrbit"> Auto-orbit</label>
+    <label><input type="checkbox" id="chkPause"> Pause</label>
+  </div>
+
+  <div class="btns">
+    <button id="btnSwap">Swap ⇄</button>
+    <button id="btnReset">Reset</button>
+    <button id="btnShot">Shot</button>
+    <button id="btnHide">Hide ‹</button>
+  </div>
+</div>
+
+<div id="hud"><b id="fps">—</b> fps · <span id="resTxt"></span></div>
+<div id="err"></div>
+
+<!-- ============================ vertex shader ============================ -->
+<script id="vs" type="x-shader/x-vertex">
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+</script>
+
+<!-- =========================== fragment shader =========================== -->
+<script id="fs" type="x-shader/x-fragment">
+precision highp float;
+
+#define MAX_STEPS 240
+#define PI 3.14159265
+
+uniform vec2  uResolution;
+uniform float uTime;
+uniform vec3  uCamPos;
+uniform vec3  uCamRight;
+uniform vec3  uCamUp;
+uniform vec3  uCamFwd;
+uniform float uFov;
+
+uniform float uThroat;      // b : throat radius (portal size)
+uniform float uCurve;       // curvature exaggeration (1 = physical)
+uniform float uRim;         // portal-rim glow
+uniform float uBright;
+uniform float uStepScale;
+uniform int   uOutWorld;
+uniform int   uPortalWorld;
+
+// -------------------------------------------------------------- hashes / noise
+float hash21(vec2 p){
+  p = fract(p * vec2(123.34, 345.45));
+  p += dot(p, p + 34.345);
+  return fract(p.x * p.y);
+}
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i), b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0)), d = hash21(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+float fbm(vec2 p){
+  float v = 0.0, amp = 0.5;
+  for (int k = 0; k < 5; k++){ v += amp * vnoise(p); p *= 2.03; amp *= 0.5; }
+  return v;
+}
+
+// ============================================================ WORLDS (dir -> color)
+
+// 0 — deep space
+vec3 wSpace(vec3 d){
+  float u = atan(d.z, d.x), v = asin(clamp(d.y, -1.0, 1.0));
+  vec2 uv = vec2(u, v);
+  float neb = fbm(uv * 2.0 + 4.0) * fbm(uv * 3.7 - 2.0);
+  vec3 col = mix(vec3(0.006, 0.008, 0.016), vec3(0.10, 0.04, 0.17), neb) * neb * 1.4;
+  col += vec3(0.02, 0.05, 0.09) * pow(neb, 2.0) * 0.6;
+  for (int L = 0; L < 3; L++){
+    float sc = 70.0 + float(L) * 130.0;
+    vec2 g = uv * sc; vec2 id = floor(g), f = fract(g);
+    float h = hash21(id + float(L) * 41.7);
+    if (h > 0.955){
+      vec2 sp = vec2(hash21(id + 1.7), hash21(id + 4.3));
+      float star = smoothstep(0.14, 0.0, length(f - sp));
+      float tw = 0.65 + 0.35 * sin(uTime * 2.5 + h * 120.0);
+      vec3 sc2 = mix(vec3(0.65, 0.78, 1.0), vec3(1.0, 0.87, 0.62), hash21(id + 8.1));
+      col += star * tw * sc2 * ((h - 0.955) / 0.045) * 1.7;
+    }
+  }
+  return col;
+}
+
+// shared: fake a ground plane by projecting a downward ray onto y = -1
+vec3 groundColor(vec3 d, vec3 near, vec3 far, float scale){
+  vec2 g = d.xz / max(-d.y, 0.02) * scale;
+  float n = fbm(g * 0.5) * 0.6 + fbm(g * 2.0) * 0.4;
+  float fade = clamp(-d.y * 3.0, 0.0, 1.0);          // horizon haze
+  return mix(far, mix(near, far, n), fade);
+}
+
+// 1 — daylight meadow
+vec3 wDaylight(vec3 d){
+  vec3 sunDir = normalize(vec3(0.45, 0.30, 0.82));
+  if (d.y > 0.0){
+    vec3 sky = mix(vec3(0.80, 0.88, 1.0), vec3(0.20, 0.42, 0.85), clamp(d.y, 0.0, 1.0));
+    float s = max(dot(d, sunDir), 0.0);
+    sky += vec3(1.0, 0.97, 0.85) * pow(s, 1200.0) * 4.0;   // sun disk
+    sky += vec3(1.0, 0.92, 0.72) * pow(s, 6.0) * 0.35;     // glow
+    float cl = fbm(d.xz / max(d.y, 0.12) * 1.3 + uTime * 0.01);
+    sky = mix(sky, vec3(1.0), smoothstep(0.55, 0.95, cl) * clamp(d.y * 2.0, 0.0, 1.0) * 0.9);
+    return sky;
+  }
+  vec3 gc = groundColor(d, vec3(0.22, 0.52, 0.16), vec3(0.55, 0.62, 0.45), 3.0);
+  return gc * (0.85 + 0.25 * max(dot(normalize(vec3(d.x,0.0,d.z)) + vec3(0,1,0)*0.0, sunDir), 0.0));
+}
+
+// 2 — alien sunset / lava
+vec3 wSunset(vec3 d){
+  vec3 sunDir = normalize(vec3(0.7, 0.06, 0.71));
+  if (d.y > -0.02){
+    float t = clamp(d.y, 0.0, 1.0);
+    vec3 sky = mix(vec3(1.0, 0.45, 0.18), vec3(0.35, 0.12, 0.35), t);
+    sky = mix(sky, vec3(1.0, 0.75, 0.35), pow(max(dot(d, sunDir), 0.0), 3.0) * 0.6);
+    float s = max(dot(d, sunDir), 0.0);
+    sky += vec3(1.0, 0.6, 0.3) * pow(s, 900.0) * 5.0;
+    return sky;
+  }
+  vec3 gc = groundColor(d, vec3(0.35, 0.05, 0.03), vec3(0.9, 0.28, 0.12), 2.4);
+  float glow = fbm(d.xz / max(-d.y, 0.05) * 4.0 + uTime * 0.05);
+  gc += vec3(1.0, 0.35, 0.08) * smoothstep(0.6, 0.95, glow) * 1.2;   // lava veins
+  return gc;
+}
+
+// 3 — twin-moon alien
+vec3 wAlien(vec3 d){
+  if (d.y > 0.0){
+    vec3 sky = mix(vec3(0.18, 0.05, 0.28), vec3(0.03, 0.06, 0.14), clamp(d.y, 0.0, 1.0));
+    float u = atan(d.z, d.x), v = asin(clamp(d.y, -1.0, 1.0));
+    for (int L = 0; L < 2; L++){
+      vec2 g = vec2(u, v) * (120.0 + float(L) * 90.0);
+      vec2 id = floor(g);
+      float h = hash21(id + float(L) * 12.3);
+      if (h > 0.97) sky += vec3(0.8, 0.9, 1.0) * smoothstep(0.12, 0.0, length(fract(g) - 0.5)) * 1.2;
+    }
+    float m1 = smoothstep(0.06, 0.05, length(d - normalize(vec3(0.5, 0.5, 0.2))));
+    float m2 = smoothstep(0.10, 0.09, length(d - normalize(vec3(-0.6, 0.35, -0.3))));
+    sky += vec3(0.9, 0.85, 0.75) * m1 + vec3(0.5, 0.9, 0.8) * m2 * 0.8;
+    return sky;
+  }
+  return groundColor(d, vec3(0.24, 0.06, 0.30), vec3(0.10, 0.35, 0.32), 2.8) + vec3(0.05, 0.0, 0.08);
+}
+
+vec3 worldSky(int id, vec3 d){
+  if (id == 0) return wSpace(d);
+  else if (id == 1) return wDaylight(d);
+  else if (id == 2) return wSunset(d);
+  return wAlien(d);
+}
+
+// ======================================================= wormhole geodesic
+// Ellis / Morris-Thorne metric:  ds^2 = -dt^2 + dl^2 + (b^2 + l^2)(dtheta^2 + sin^2 theta dphi^2)
+// In the ray plane:  l'' = curve * L^2 * l / r^4 ,  phi' = L / r^2 ,  r = sqrt(b^2 + l^2)
+// state y = (l, l', phi).  L is the conserved angular momentum.
+vec3 deriv(vec3 y, float L, float b2, float curve){
+  float r2 = b2 + y.x * y.x;
+  return vec3(y.y, curve * (L * L) * y.x / (r2 * r2), L / r2);
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
+  float t = tan(uFov * 0.5);
+  vec3 dir = normalize(uCamFwd + uv.x * t * uCamRight + uv.y * t * uCamUp);
+
+  float b  = uThroat;
+  float b2 = b * b;
+
+  // ray plane basis: e1 radial (toward camera), e2 tangential (in ray direction)
+  vec3 e1 = normalize(uCamPos);
+  vec3 perp = dir - dot(dir, e1) * e1;
+  float pl = length(perp);
+  vec3 e2 = pl > 1e-5 ? perp / pl
+          : normalize(cross(e1, abs(e1.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+
+  float l0 = length(uCamPos);          // camera proper radial coord (world A, l > 0)
+  float r0 = sqrt(b2 + l0 * l0);
+  float L  = r0 * dot(dir, e2);         // conserved angular momentum (>= 0)
+
+  vec3 y = vec3(l0, dot(dir, e1), 0.0); // (l, l', phi)
+
+  float escapeR = l0 * 1.5 + 34.0;
+  float minR = r0;
+
+  for (int i = 0; i < MAX_STEPS; i++){
+    float r = sqrt(b2 + y.x * y.x);
+    minR = min(minR, r);
+    if (r > escapeR) break;
+
+    float h = uStepScale * max(0.03, 0.06 * r);
+    // RK4
+    vec3 k1 = deriv(y, L, b2, uCurve);
+    vec3 k2 = deriv(y + 0.5 * h * k1, L, b2, uCurve);
+    vec3 k3 = deriv(y + 0.5 * h * k2, L, b2, uCurve);
+    vec3 k4 = deriv(y + h * k3, L, b2, uCurve);
+    y += (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+  }
+
+  // reconstruct outgoing 3D direction from plane state
+  float l = y.x, phi = y.z;
+  float r = sqrt(b2 + l * l);
+  float dr = (l / r) * y.y;
+  float phidot = L / (r * r);
+  vec3 radial = cos(phi) * e1 + sin(phi) * e2;
+  vec3 tang   = -sin(phi) * e1 + cos(phi) * e2;
+  vec3 outDir = normalize(dr * radial + r * phidot * tang);
+
+  // which world did the ray end up in?  l > 0 outside, l < 0 through the throat
+  int world = (l >= 0.0) ? uOutWorld : uPortalWorld;
+  vec3 col = worldSky(world, outDir);
+
+  // portal rim: rays that grazed the throat (|L| ~ b) form the Einstein ring
+  float rimWidth = max(0.08 * b, 0.05);
+  float rim = exp(-pow((abs(L) - b) / rimWidth, 2.0));
+  col += uRim * rim * vec3(0.7, 0.55, 1.0) * 1.6;
+
+  col *= uBright;
+  col = vec3(1.0) - exp(-col * 1.1);
+  col = pow(col, vec3(1.0 / 2.2));
+  gl_FragColor = vec4(col, 1.0);
+}
+</script>
+
+<script>
+"use strict";
+(function () {
+  const canvas = document.getElementById("glcanvas");
+  const errBox = document.getElementById("err");
+  function fail(msg) { errBox.style.display = "grid"; errBox.innerHTML = msg; throw new Error(msg); }
+
+  const gl = canvas.getContext("webgl", { antialias: false, preserveDrawingBuffer: true })
+          || canvas.getContext("experimental-webgl", { preserveDrawingBuffer: true });
+  if (!gl) fail("WebGL is not available in this browser.");
+
+  function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+      fail("Shader compile error:<br><pre style='text-align:left'>" + gl.getShaderInfoLog(s) + "</pre>");
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, document.getElementById("vs").textContent));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, document.getElementById("fs").textContent));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) fail("Link error: " + gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+
+  const vbuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, "aPos");
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const U = {};
+  ["uResolution","uTime","uCamPos","uCamRight","uCamUp","uCamFwd","uFov","uThroat",
+   "uCurve","uRim","uBright","uStepScale","uOutWorld","uPortalWorld"]
+    .forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+  const WORLDS = ["Deep space", "Daylight meadow", "Alien sunset", "Twin-moon night"];
+
+  // sliders: key -> [label, min, max, step, default, fmt]
+  const SPEC = {
+    throat:     ["Throat size",       0.3, 3.5, 0.02, 1.0, v => v.toFixed(2)],
+    curve:      ["Space curvature",   0.2, 3.0, 0.01, 1.0, v => v.toFixed(2)],
+    rim:        ["Portal rim glow",   0.0, 2.0, 0.02, 0.6, v => v.toFixed(2)],
+    distance:   ["Camera distance",   3.0, 45.0, 0.1, 12.0, v => v.toFixed(1)],
+    pitch:      ["Camera tilt",      -89, 89,   0.5, 6,    v => v.toFixed(0) + "°"],
+    fov:        ["Field of view",     30, 110,  1,   62,   v => v.toFixed(0) + "°"],
+    brightness: ["Brightness",        0.2, 3.0, 0.02, 1.0, v => v.toFixed(2)],
+    quality:    ["Ray quality",       0.5, 2.5, 0.05, 1.0, v => (1 / v).toFixed(2) + "x"],
+    resScale:   ["Resolution",        0.4, 1.5, 0.05, 1.0, v => Math.round(v * 100) + "%"],
+  };
+  const DEF_OUT = 0, DEF_PORTAL = 1;
+
+  const state = {}, inputs = {}, valEls = {};
+  for (const key in SPEC) {
+    const [label, mn, mx, step, def, fmt] = SPEC[key];
+    state[key] = def;
+    const row = document.querySelector(`[data-slider="${key}"]`);
+    row.innerHTML = `<label><span class="name">${label}</span><span class="val"></span></label>` +
+                    `<input type="range" min="${mn}" max="${mx}" step="${step}">`;
+    const input = row.querySelector("input"), valEl = row.querySelector(".val");
+    input.value = def; valEl.textContent = fmt(def);
+    input.addEventListener("input", () => {
+      state[key] = parseFloat(input.value); valEl.textContent = fmt(state[key]);
+      if (key === "resScale") resize();
+    });
+    inputs[key] = input; valEls[key] = valEl;
+  }
+  function setSlider(key, v) { state[key] = v; inputs[key].value = v; valEls[key].textContent = SPEC[key][5](v); }
+
+  // world dropdowns
+  const selOut = document.getElementById("selOut"), selPortal = document.getElementById("selPortal");
+  WORLDS.forEach((w, i) => {
+    selOut.add(new Option(w, i));
+    selPortal.add(new Option(w, i));
+  });
+  selOut.value = DEF_OUT; selPortal.value = DEF_PORTAL;
+
+  let yaw = 0.5;
+  const chkOrbit = document.getElementById("chkOrbit");
+  const chkPause = document.getElementById("chkPause");
+
+  // ---------------------------------------------------------------- interaction
+  let dragging = false, lastX = 0, lastY = 0;
+  canvas.addEventListener("pointerdown", e => {
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    canvas.classList.add("dragging"); canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    yaw -= (e.clientX - lastX) * 0.006;
+    setSlider("pitch", Math.max(-89, Math.min(89, state.pitch - (e.clientY - lastY) * 0.35)));
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  function endDrag() { dragging = false; canvas.classList.remove("dragging"); }
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("wheel", e => {
+    e.preventDefault();
+    setSlider("distance", Math.max(3, Math.min(45, state.distance * (1 + Math.sign(e.deltaY) * 0.08))));
+  }, { passive: false });
+
+  const panel = document.getElementById("panel");
+  document.getElementById("btnHide").onclick = () => panel.classList.add("hidden");
+  document.getElementById("toggle").onclick = () => panel.classList.remove("hidden");
+  document.getElementById("btnSwap").onclick = () => {
+    const a = selOut.value; selOut.value = selPortal.value; selPortal.value = a;
+  };
+  document.getElementById("btnReset").onclick = () => {
+    for (const k in SPEC) setSlider(k, SPEC[k][4]);
+    selOut.value = DEF_OUT; selPortal.value = DEF_PORTAL; yaw = 0.5;
+  };
+  document.getElementById("btnShot").onclick = () => {
+    renderFrame(performance.now());
+    const a = document.createElement("a");
+    a.download = "wormhole.png"; a.href = canvas.toDataURL("image/png"); a.click();
+  };
+  window.addEventListener("keydown", e => {
+    if (e.key === " ") { chkPause.checked = !chkPause.checked; e.preventDefault(); }
+    else if (e.key.toLowerCase() === "h") panel.classList.toggle("hidden");
+  });
+
+  // ---------------------------------------------------------------- sizing
+  const resTxt = document.getElementById("resTxt");
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const s = state.resScale * dpr;
+    const w = Math.max(1, Math.floor(window.innerWidth * s));
+    const h = Math.max(1, Math.floor(window.innerHeight * s));
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    gl.viewport(0, 0, w, h);
+    resTxt.textContent = w + "×" + h;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // ---------------------------------------------------------------- render
+  let simTime = 0, lastNow = performance.now();
+  let fpsAccum = 0, fpsCount = 0, fpsShown = performance.now();
+  const fpsEl = document.getElementById("fps");
+
+  function renderFrame(now) {
+    const dt = Math.min((now - lastNow) / 1000, 0.05);
+    lastNow = now;
+    if (!chkPause.checked) simTime += dt;
+    if (chkOrbit.checked && !dragging) yaw += dt * 0.15;
+
+    const dist = state.distance, pitch = state.pitch * Math.PI / 180;
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const camPos = [dist * cp * Math.cos(yaw), dist * sp, dist * cp * Math.sin(yaw)];
+    const fwd = norm([-camPos[0], -camPos[1], -camPos[2]]);
+    let right = cross(fwd, [0, 1, 0]);
+    if (len(right) < 1e-4) right = [1, 0, 0];
+    right = norm(right);
+    const up = cross(right, fwd);
+
+    gl.uniform2f(U.uResolution, canvas.width, canvas.height);
+    gl.uniform1f(U.uTime, simTime);
+    gl.uniform3fv(U.uCamPos, camPos);
+    gl.uniform3fv(U.uCamRight, right);
+    gl.uniform3fv(U.uCamUp, up);
+    gl.uniform3fv(U.uCamFwd, fwd);
+    gl.uniform1f(U.uFov, state.fov * Math.PI / 180);
+    gl.uniform1f(U.uThroat, state.throat);
+    gl.uniform1f(U.uCurve, state.curve);
+    gl.uniform1f(U.uRim, state.rim);
+    gl.uniform1f(U.uBright, state.brightness);
+    gl.uniform1f(U.uStepScale, state.quality);
+    gl.uniform1i(U.uOutWorld, parseInt(selOut.value, 10));
+    gl.uniform1i(U.uPortalWorld, parseInt(selPortal.value, 10));
+
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  function loop(now) {
+    renderFrame(now);
+    const inst = 1000 / Math.max(now - (loop._p || now), 0.001);
+    loop._p = now;
+    fpsAccum += inst; fpsCount++;
+    if (now - fpsShown > 400) { fpsEl.textContent = Math.round(fpsAccum / fpsCount); fpsAccum = 0; fpsCount = 0; fpsShown = now; }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function cross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+  function len(a) { return Math.hypot(a[0], a[1], a[2]); }
+  function norm(a) { const l = len(a) || 1; return [a[0]/l, a[1]/l, a[2]/l]; }
+})();
+</script>
+</body>
+</html>

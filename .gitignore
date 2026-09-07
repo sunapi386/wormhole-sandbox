@@ -1,0 +1,5 @@
+node_modules/
+_verify.png
+_shot*.js
+*.log
+.DS_Store
