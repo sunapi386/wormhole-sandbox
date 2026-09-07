@@ -40,11 +40,23 @@ arrows pointing to each mouth, and scroll-to-dolly.
 
 ![Wormhole network](media/v3-network.png)
 
+### game.html - the engine
+
+A modular rebuild of v3 into a small game-engine structure (shared core in `src/`, pluggable
+worlds), with three real places linked in a triangle: Mars (Olympus Mons), Earth (the Monterey
+Pacific coast), and a Halo ringworld. Fly into a wormhole and the passage through the throat is
+an actual multi-second flight, not an instant cut, so you feel the crossing before you emerge in
+the connected world. Includes an attract-mode tour that flies the loop while slowly rotating,
+softened (blurred) lensing, the mini-map, and on-screen mouth arrows.
+
+![Wormhole network engine](media/game.png)
+
 ## Controls
 
 - v1 / v2: drag to orbit, scroll to zoom. Space pauses animation, `H` hides the panel.
-- v3: **W A S D** to fly, **drag** to look, **scroll** to move in/out, **R/F** up/down,
-  **Shift** to boost, **Space** to pause animation, **H** to hide the panel.
+- v3 / game: **W A S D** to fly, **drag** to look, **scroll** to move in/out, **R/F** up/down,
+  **Shift** to boost, **Space** to pause animation, **H** to hide the panel. In `game.html`,
+  **T** toggles the tour (any input hands you control).
 
 ## Running
 
@@ -78,7 +90,22 @@ Each pixel casts a ray from the camera and integrates its path through a curved 
   throat it is handed to the paired mouth in the destination world and keeps marching (up to a
   few hops). This is a nearest-throat approximation, not a superposed multi-throat metric.
 
-A physics review lives in `docs/physics-review.md`.
+A physics review (correctness of the geodesic integration, the disk model, the wormhole
+reduction, and the multi-portal approximation) lives in `docs/physics-review.md`.
+
+## Project structure
+
+- `index.html`, `v2.html`, `v3.html` - the self-contained standalone demos.
+- `game.html` - the engine build, loading the shared modules below.
+- `src/vec.js` - vector helpers.
+- `src/worlds.js` - the pluggable worlds (GLSL sky/ground snippets plus metadata). Add a world here.
+- `src/portals.js` - the wormhole graph (mouths, pairings, world topology).
+- `src/shader.js` - assembles the fragment shader from the shared chunks and the worlds.
+- `src/camera.js` - free-flight, the through-throat traversal, and the attract-mode tour.
+- `src/overlay.js` - mini-map and on-screen mouth arrows.
+- `src/engine.js` - GL setup, controls, and the render loop.
+
+`game.html` runs from `file://` directly, or serve the folder for a normal http origin.
 
 ## Regenerating the screenshots
 

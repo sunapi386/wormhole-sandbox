@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Wormhole Network — Mars · Earth · Halo</title>
+<style>
+  :root {
+    --panel-bg: rgba(10, 12, 20, 0.72);
+    --accent: #7fe8c0;
+    --accent-dim: #34705f;
+    --text: #dcf0ea;
+    --text-dim: #8fb0a8;
+    --track: #1d3430;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; width: 100%; background: #000; overflow: hidden;
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    color: var(--text); -webkit-user-select: none; user-select: none; touch-action: none; }
+  #glcanvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+  #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .5s ease; z-index: 8; }
+
+  #panel { position: fixed; top: 14px; left: 14px; width: 290px; max-height: calc(100vh - 28px); z-index: 6;
+    overflow-y: auto; background: var(--panel-bg); backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+    border: 1px solid rgba(127, 232, 192, 0.2); border-radius: 12px; padding: 14px 15px 16px; font-size: 12px; line-height: 1.4;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55); transition: transform .28s ease, opacity .28s ease; }
+  #panel.hidden { transform: translateX(-115%); opacity: 0; }
+  #panel::-webkit-scrollbar { width: 8px; }
+  #panel::-webkit-scrollbar-thumb { background: var(--accent-dim); border-radius: 4px; }
+  .title { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 2px; }
+  .sub { color: var(--text-dim); font-size: 10.5px; margin: 0 0 10px; }
+  .sub a { color: var(--accent); }
+  .keys { font-size: 10.5px; color: var(--text-dim); background: rgba(127,232,192,0.06); border: 1px solid rgba(127,232,192,0.14);
+    border-radius: 8px; padding: 7px 9px; margin: 4px 0 6px; }
+  .keys b { color: var(--accent); font-weight: 500; }
+  .group { margin: 12px 0 4px; color: var(--text-dim); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 9px; }
+  .row { margin: 9px 0; }
+  .row label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+  .row .name { color: var(--text); }
+  .row .val { color: var(--accent); font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 3px; background: var(--track); outline: none; margin: 2px 0; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(127,232,192,0.6); cursor: pointer; border: none; }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer; }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 2px; }
+  .checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text); }
+  input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+  .btns { display: flex; gap: 7px; margin-top: 12px; flex-wrap: wrap; }
+  button { flex: 1 1 auto; min-width: 60px; background: rgba(127,232,192,0.08); color: var(--accent); border: 1px solid rgba(127,232,192,0.3);
+    border-radius: 7px; padding: 7px 6px; font-family: inherit; font-size: 11px; letter-spacing: .04em; cursor: pointer; transition: background .15s; }
+  button:hover { background: rgba(127,232,192,0.18); }
+  button:active { transform: translateY(1px); }
+  #hud { position: fixed; bottom: 12px; left: 14px; z-index: 6; font-size: 11px; color: var(--text-dim); background: rgba(10,12,20,0.55); padding: 6px 10px; border-radius: 7px; pointer-events: none; }
+  #hud b { color: var(--accent); font-weight: 500; }
+  #world { position: fixed; top: 16px; right: 18px; z-index: 6; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent);
+    background: rgba(10,12,20,0.55); padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(127,232,192,0.25); pointer-events: none; }
+  #toggle { position: fixed; top: 14px; left: 14px; z-index: 5; display: none; background: var(--panel-bg); color: var(--accent);
+    border: 1px solid rgba(127,232,192,0.3); border-radius: 8px; width: 38px; height: 38px; font-size: 17px; cursor: pointer; }
+  #panel.hidden ~ #toggle { display: block; }
+  #err { position: fixed; inset: 0; display: none; place-items: center; background: #000; color: #ff7a7a; font-size: 13px; padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+<canvas id="overlay"></canvas>
+<div id="flash"></div>
+<button id="toggle" title="Show controls">☰</button>
+<div id="world">Mars</div>
+
+<div id="panel">
+  <div class="title">Wormhole Network</div>
+  <div class="sub">Mars, Earth (Monterey) and Halo, linked by traversable wormholes. Fly through a mouth and the flight through the throat takes you to the world it connects to. <a href="index.html">v1</a> · <a href="v2.html">v2</a> · <a href="v3.html">v3</a></div>
+  <div class="keys"><b>W A S D</b> fly · <b>drag</b> look · <b>scroll</b> in/out · <b>R/F</b> up/down · <b>Shift</b> boost · <b>T</b> tour · <b>Space</b> pause · <b>H</b> hide</div>
+
+  <div class="group">Wormholes</div>
+  <div class="row" data-slider="throat"></div>
+  <div class="row" data-slider="rim"></div>
+  <div class="row" data-slider="softness"></div>
+  <div class="row" data-slider="traversal"></div>
+
+  <div class="group">Flight &amp; camera</div>
+  <div class="row" data-slider="flySpeed"></div>
+  <div class="row" data-slider="fov"></div>
+
+  <div class="group">Render</div>
+  <div class="row" data-slider="brightness"></div>
+  <div class="row" data-slider="quality"></div>
+  <div class="row" data-slider="resScale"></div>
+
+  <div class="checks">
+    <label><input type="checkbox" id="chkTour" checked> Tour</label>
+    <label><input type="checkbox" id="chkPause"> Pause anim</label>
+  </div>
+
+  <div class="btns">
+    <button id="btnReset">Reset</button>
+    <button id="btnShot">Shot</button>
+    <button id="btnHide">Hide ‹</button>
+  </div>
+</div>
+
+<div id="hud"><b id="fps">—</b> fps · <span id="resTxt"></span></div>
+<div id="err"></div>
+
+<script src="src/vec.js"></script>
+<script src="src/portals.js"></script>
+<script src="src/worlds.js"></script>
+<script src="src/shader.js"></script>
+<script src="src/overlay.js"></script>
+<script src="src/camera.js"></script>
+<script src="src/engine.js"></script>
+<script>window.startEngine();</script>
+</body>
+</html>
