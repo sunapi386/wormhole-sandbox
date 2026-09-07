@@ -12,4 +12,13 @@ window.VEC = {
   mix:  (a, b, t) => a + (b - a) * t,
   smoother: (u) => { u = Math.max(0, Math.min(1, u)); return u*u*u*(u*(u*6-15)+10); },
   lerpAngle: (a, b, t) => { let d = ((b - a + Math.PI) % (2*Math.PI)) - Math.PI; if (d < -Math.PI) d += 2*Math.PI; return a + d*t; },
+  // rotate v around unit axis k by angle a (Rodrigues)
+  rotateAround: (v, k, a) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    const kv = [k[1]*v[2]-k[2]*v[1], k[2]*v[0]-k[0]*v[2], k[0]*v[1]-k[1]*v[0]];
+    const kd = k[0]*v[0] + k[1]*v[1] + k[2]*v[2];
+    return [ v[0]*c + kv[0]*s + k[0]*kd*(1-c),
+             v[1]*c + kv[1]*s + k[1]*kd*(1-c),
+             v[2]*c + kv[2]*s + k[2]*kd*(1-c) ];
+  },
 };

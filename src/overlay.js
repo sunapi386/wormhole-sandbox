@@ -29,7 +29,7 @@ window.createOverlay = function (octx, portals, worldHex, worldNames) {
         edgeArrow(cx0 + dxu*t, cy0 - dyu*t, Math.atan2(-dyu, dxu), name, col, W);
       }
     }
-    drawMinimap(cam, W, H);
+    drawMinimap(cam, W, H, basis.fwd);
   }
 
   function onScreenTag(x, y, name, col) {
@@ -58,7 +58,7 @@ window.createOverlay = function (octx, portals, worldHex, worldNames) {
     octx.restore();
   }
 
-  function drawMinimap(cam, W, H) {
+  function drawMinimap(cam, W, H, fwd) {
     const R = 60, pad = 16, cx = W - R - pad, cy = H - R - pad, scale = R/12;
     octx.save();
     octx.beginPath(); octx.arc(cx, cy, R, 0, 7); octx.fillStyle = "rgba(10,12,20,0.68)"; octx.fill();
@@ -74,7 +74,7 @@ window.createOverlay = function (octx, portals, worldHex, worldNames) {
       octx.beginPath(); octx.arc(p[0], p[1], 6.5, 0, 7); octx.strokeStyle = worldHex[portals.list[i].dstWorld]; octx.globalAlpha = 0.5; octx.stroke(); octx.globalAlpha = 1;
     }
     const c = clamp(cx + cam.pos[0]*scale, cy + cam.pos[2]*scale);
-    octx.save(); octx.translate(c[0], c[1]); octx.rotate(Math.atan2(Math.sin(cam.yaw), Math.cos(cam.yaw)));
+    octx.save(); octx.translate(c[0], c[1]); octx.rotate(Math.atan2(fwd[2], fwd[0]));
     octx.beginPath(); octx.moveTo(7, 0); octx.lineTo(-4, 4); octx.lineTo(-4, -4); octx.closePath();
     octx.fillStyle = "#7fe8c0"; octx.fill(); octx.restore();
     octx.restore();
