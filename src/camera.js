@@ -10,6 +10,8 @@ window.createCamera = function (deps) {
   const portals = deps.portals;
   const worldHasGround = deps.worldHasGround;
   const getState = deps.getState;          // () => { throat, flySpeed, traversal }
+  const getAxes = deps.getAxes || (() => ZERO_AXES);   // touch/analog: {yaw,pitch,roll,throttle}
+  const ZERO_AXES = { yaw: 0, pitch: 0, roll: 0, throttle: 0 };
   const onFlash = deps.onFlash || function () {};
   const INFL = portals.INFLUENCE;
 
@@ -82,23 +84,27 @@ window.createCamera = function (deps) {
     const st = getState();
     if (transit) { updateTransit(dt, st); return camBasis(); }
 
-    if (tour.active) {
-      tourStep(dt, st);
-    } else {
-      const rd = (keys.KeyE ? 1 : 0) - (keys.KeyQ ? 1 : 0);
-      if (rd) rotRoll(rd * 1.6 * dt);           // roll about local forward
-      manualMove(dt, st);
-    }
-    if (worldHasGround(cam.world)) cam.pos[1] = Math.max(cam.pos[1], 0.4);
+    const ax = getAxes();
+    if (Math.abs(ax.yaw) + Math.abs(ax.pitch) + Math.abs(ax.roll) + Math.abs(ax.throttle) > 0.02) userTookControl();
 
+    if (tour.active) tourStep(dt, st);
+    else applyManual(dt, st, ax);
+
+    if (worldHasGround(cam.world)) cam.pos[1] = Math.max(cam.pos[1], 0.4);
     cooldown -= dt;
     if (cooldown <= 0) checkEnter(st);
     return camBasis();
   }
 
-  function manualMove(dt, st) {
+  // Manual control folds keyboard and analog (touch joystick) input together.
+  function applyManual(dt, st, ax) {
+    const rollK = (keys.KeyE ? 1 : 0) - (keys.KeyQ ? 1 : 0);
+    if (rollK || ax.roll) rotRoll((rollK + ax.roll) * 1.6 * dt);   // roll about local forward
+    if (ax.yaw)   rotYaw(-ax.yaw * 1.3 * dt);                       // stick right -> turn right
+    if (ax.pitch) rotPitch(ax.pitch * 1.3 * dt);                    // stick up -> nose up
+
     const spd = st.flySpeed * ((keys.ShiftLeft || keys.ShiftRight) ? 3 : 1);
-    const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+    const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) + ax.throttle;
     const s = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
     const u = (keys.KeyR ? 1 : 0) - (keys.KeyF ? 1 : 0);
     let mv = V.scale(cam.fwd, f);

@@ -1,7 +1,8 @@
 // 2D HUD overlay: on-screen tags/arrows pointing to each wormhole mouth in the current world,
 // plus a top-down mini-map radar. Pure canvas 2D; draws in CSS-pixel coordinates.
 window.createOverlay = function (octx, portals, worldHex, worldNames) {
-  function draw(basis, cam, W, H, fovRad) {
+  function draw(basis, cam, W, H, fovRad, bottomInset) {
+    bottomInset = bottomInset || 0;
     const cx0 = W/2, cy0 = H/2;
     octx.clearRect(0, 0, W, H);
     octx.textBaseline = "middle";
@@ -29,7 +30,7 @@ window.createOverlay = function (octx, portals, worldHex, worldNames) {
         edgeArrow(cx0 + dxu*t, cy0 - dyu*t, Math.atan2(-dyu, dxu), name, col, W);
       }
     }
-    drawMinimap(cam, W, H, basis.fwd);
+    drawMinimap(cam, W, H, basis.fwd, bottomInset);
   }
 
   function onScreenTag(x, y, name, col) {
@@ -58,8 +59,8 @@ window.createOverlay = function (octx, portals, worldHex, worldNames) {
     octx.restore();
   }
 
-  function drawMinimap(cam, W, H, fwd) {
-    const R = 60, pad = 16, cx = W - R - pad, cy = H - R - pad, scale = R/12;
+  function drawMinimap(cam, W, H, fwd, bottomInset) {
+    const R = 60, pad = 16, cx = W - R - pad, cy = H - R - pad - (bottomInset || 0), scale = R/12;
     octx.save();
     octx.beginPath(); octx.arc(cx, cy, R, 0, 7); octx.fillStyle = "rgba(10,12,20,0.68)"; octx.fill();
     octx.lineWidth = 1; octx.strokeStyle = "rgba(120,220,180,0.35)"; octx.stroke();

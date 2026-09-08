@@ -74,10 +74,12 @@ window.startEngine = function () {
   // ---- camera + overlay ----
   const hash = location.hash || "";
   const mw = hash.match(/w(\d)/);
+  const sticks = window.createJoysticks(document.body);   // touch-only on-screen controls
   const camera = window.createCamera({
     portals: P,
     worldHasGround: (w) => WORLDS[w].hasGround,
     getState: () => ({ throat: state.throat, flySpeed: state.flySpeed, traversal: state.traversal }),
+    getAxes: () => sticks.axes(),
     onFlash: () => doFlash(),
     onTourChange: (v) => { chkTour.checked = v; },
     startWorld: mw ? +mw[1] : 0,
@@ -94,6 +96,7 @@ window.startEngine = function () {
   const worldTag = document.getElementById("world");
   chkTour.checked = camera.isTour();
   chkTour.addEventListener("change", () => camera.setTour(chkTour.checked));
+  if (sticks.isTouch) { panel.classList.add("hidden"); document.getElementById("hud").style.display = "none"; }   // keep the joysticks clear on phones
   document.getElementById("btnHide").onclick = () => panel.classList.add("hidden");
   document.getElementById("toggle").onclick = () => panel.classList.remove("hidden");
   document.getElementById("btnReset").onclick = () => camera.reset();
@@ -146,7 +149,7 @@ window.startEngine = function () {
     gl.uniform1fv(U.uPortRad, P.radArray(state.throat));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    overlayR.draw(basis, cam, winW, winH, state.fov * Math.PI / 180);
+    overlayR.draw(basis, cam, winW, winH, state.fov * Math.PI / 180, sticks.isTouch ? 150 : 0);
     worldTag.textContent = WORLD_NAMES[cam.world];
     worldTag.style.color = WORLD_HEX[cam.world];
     worldTag.style.borderColor = WORLD_HEX[cam.world] + "66";
