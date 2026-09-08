@@ -105,7 +105,18 @@ window.startEngine = function () {
     if (e.code === "Space") { chkPause.checked = !chkPause.checked; e.preventDefault(); }
     else if (e.code === "KeyH") panel.classList.toggle("hidden");
   });
-  function doFlash() { flash.style.transition = "none"; flash.style.opacity = "0.6"; requestAnimationFrame(() => { flash.style.transition = "opacity .5s ease"; flash.style.opacity = "0"; }); }
+  // Smooth wormhole transition: at the throat crossing, freeze the last (pre-crossing) frame as
+  // an image over the canvas and dissolve it out, revealing the world you emerge into underneath.
+  // Reads as passing through the throat rather than a hard teleport blink.
+  function doFlash() {
+    try {
+      flash.style.backgroundImage = "url(" + canvas.toDataURL("image/jpeg", 0.82) + ")";
+      flash.style.backgroundSize = "cover";
+      flash.style.backgroundPosition = "center";
+    } catch (e) { /* tainted canvas: fall back to a soft dip */ flash.style.backgroundImage = "none"; }
+    flash.style.transition = "none"; flash.style.opacity = "1";
+    requestAnimationFrame(() => { flash.style.transition = "opacity 0.65s ease"; flash.style.opacity = "0"; });
+  }
 
   // ---- sizing ----
   const resTxt = document.getElementById("resTxt");
